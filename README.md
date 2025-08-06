@@ -1,12 +1,80 @@
-# React + Vite
+# Privy TON Test App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A test application demonstrating integration between Privy authentication and TON blockchain functionality. Built with React + Vite.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Privy authentication integration
+- TON blockchain connectivity
+- React-based frontend with Vite for fast development
+- Node.js polyfills for browser compatibility
 
-## Expanding the ESLint configuration
+## Prerequisites
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Node.js (v16 or higher)
+- pnpm (v8 or higher)
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd privy-ton-app
+```
+
+2. Install dependencies:
+```bash
+pnpm install
+```
+
+## Running the Application
+
+### Development mode
+```bash
+pnpm dev
+```
+This will start the development server at `http://localhost:5173` with hot module replacement.
+
+### Build for production
+```bash
+pnpm build
+```
+
+### Preview production build
+```bash
+pnpm preview
+```
+
+### Linting
+```bash
+pnpm lint
+```
+
+## Tech Stack
+
+- **Frontend Framework**: React 19
+- **Build Tool**: Vite
+- **Authentication**: Privy React Auth
+- **Blockchain**: TON Core, TON Crypto
+- **Package Manager**: pnpm
+
+## Project Structure
+
+```
+privy-ton-app/
+├── src/                # Source files
+│   ├── App.jsx        # Main application component
+│   ├── main.jsx       # Application entry point
+│   └── assets/        # Static assets
+├── public/            # Public static files
+├── index.html         # HTML template
+└── vite.config.js     # Vite configuration
+```
+
+## Configuration
+
+The app uses Vite for bundling and development. Configuration can be found in `vite.config.js`.
+
+## License
+
+This is a test project for demonstration purposes.
