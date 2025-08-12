@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { PrivyProvider } from '@privy-io/react-auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Omniston, OmnistonProvider } from '@ston-fi/omniston-sdk-react'
 import './index.css'
 import App from './App'
 
@@ -14,6 +15,8 @@ const queryClient = new QueryClient({
   },
 })
 
+const omniston = new Omniston({ apiUrl: "wss://omni-ws.ston.fi" })
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PrivyProvider
@@ -23,7 +26,9 @@ createRoot(document.getElementById('root')!).render(
       }}
     >
       <QueryClientProvider client={queryClient}>
-        <App />
+        <OmnistonProvider omniston={omniston}>
+          <App />
+        </OmnistonProvider>
       </QueryClientProvider>
     </PrivyProvider>
   </StrictMode>,

@@ -11,8 +11,11 @@
   },
   "dependencies": {
     "@privy-io/react-auth": "^2.21.2",
+    "@ston-fi/api": "^0.24.0",
+    "@ston-fi/omniston-sdk-react": "^0.7.4",
     "@tailwindcss/vite": "^4.1.11",
     "@tanstack/react-query": "^5.84.2",
+    "@ton-api/client": "^0.4.0",
     "@ton/core": "^0.61.0",
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^15.3.1",

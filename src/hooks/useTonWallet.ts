@@ -1,11 +1,10 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useCreateWallet } from '@privy-io/react-auth/extended-chains'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { TonClient, fromNano, Address } from '@ton/ton'
+import { fromNano, Address } from '@ton/ton'
+import { getTonClient } from '../utils/tonClient'
 
-const tonClient = new TonClient({ 
-  endpoint: 'https://toncenter.com/api/v2/jsonRPC' 
-})
+const tonClient = getTonClient()
 
 const fetchBalance = async (address: string): Promise<string> => {
   const tonAddr = Address.parse(address)

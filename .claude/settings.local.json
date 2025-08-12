@@ -13,7 +13,11 @@
       "Bash(mv:*)",
       "Bash(pnpm run:*)",
       "Bash(mkdir:*)",
-      "Bash(pnpm tsc:*)"
+      "Bash(pnpm tsc:*)",
+      "Bash(pnpm build:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   }
