@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(rm:*)",
+      "Bash(pnpm install:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm tailwindcss init:*)",
+      "Bash(npx tailwindcss init:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(mv:*)",
+      "Bash(pnpm run:*)",
+      "Bash(mkdir:*)",
+      "Bash(pnpm tsc:*)"
+    ],
+    "deny": []
+  }
+}
