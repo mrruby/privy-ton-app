@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
+import { useSignRawHash } from '@privy-io/react-auth/extended-chains'
 import { 
   useRfq, 
   useOmniston, 
@@ -11,9 +12,10 @@ import {
 } from '@ston-fi/omniston-sdk-react'
 import { Address, Cell, beginCell, storeMessage, WalletContractV4, internal } from '@ton/ton'
 import type { AssetInfoV2 } from '@ston-fi/api'
+import { toHex } from 'viem'
 import { useTonWallet } from './useTonWallet'
-import { usePrivyTonSigner } from './usePrivyTonSigner'
 import { getTonClient } from '../utils/tonClient'
+import { getWalletPublicKey } from '../utils/privyApi'
 
 interface UseOmnistonSwapProps {
   fromAsset?: AssetInfoV2
@@ -27,9 +29,9 @@ function toBaseUnits(amount: string, decimals?: number) {
 }
 
 export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapProps) => {
-  const { user } = usePrivy()
+  const { user, getAccessToken } = usePrivy()
+  const { signRawHash } = useSignRawHash()
   const { address: walletAddress } = useTonWallet()
-  const { createTransferWithPrivy } = usePrivyTonSigner()
   const omniston = useOmniston()
   
   const [outgoingTxHash, setOutgoingTxHash] = useState('')
@@ -37,8 +39,11 @@ export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapP
   const [swapError, setSwapError] = useState<Error | null>(null)
   const [isSwapping, setIsSwapping] = useState(false)
 
-  // Use wallet address as walletId for Privy signing
-  const walletId = walletAddress
+  // Get TON wallet from Privy linked accounts
+  const tonWallet = user?.linkedAccounts?.find(
+    account => account.type === 'wallet' && 'chainType' in account && account.chainType === 'ton'
+  )
+  const privyAppId = import.meta.env.VITE_PRIVY_APP_ID
 
   // Fetch quote
   const { data: quote, isLoading: quoteLoading, error: quoteError } = useRfq({
@@ -138,8 +143,14 @@ export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapP
 
   // Execute swap using Privy wallet
   const executeSwap = useCallback(async () => {
-    if (!quote || quote.type !== 'quoteUpdated' || !walletAddress || !walletId) {
-      setSwapError(new Error('Missing requirements for swap'))
+    if (!quote || quote.type !== 'quoteUpdated' || !walletAddress || !tonWallet) {
+      let errorMessage = 'Missing requirements for swap: '
+      if (!quote) errorMessage += 'No quote available. '
+      if (quote && quote.type !== 'quoteUpdated') errorMessage += `Quote type is ${quote.type}, expected quoteUpdated. `
+      if (!walletAddress) errorMessage += 'No wallet address. '
+      if (!tonWallet) errorMessage += 'No TON wallet found in linked accounts. '
+      
+      setSwapError(new Error(errorMessage))
       return
     }
 
@@ -152,47 +163,104 @@ export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapP
       // Build transaction messages
       const messages = await buildTransaction(quote)
       
-      // Create TON wallet instance  
-      const client = getTonClient()
+      if (!messages || messages.length === 0) {
+        throw new Error('No transaction messages generated')
+      }
+
+      // Fetch the public key from Privy API
+      let publicKey: string
       
-      // Get public key from Privy (you might need to store this when creating wallet)
-      const tonWallet = user?.linkedAccounts?.find(
-        account => account.type === 'wallet' && 'chainType' in account && account.chainType === 'ton'
-      )
+      // Check if wallet has id field
+      const walletId = (tonWallet as any).id
       
-      if (!tonWallet || !('publicKey' in tonWallet)) {
-        throw new Error('TON wallet not found')
+      // Check if this is an embedded wallet (imported: false, delegated: false)
+      const isEmbeddedWallet = tonWallet && 
+        'imported' in tonWallet && 
+        'delegated' in tonWallet && 
+        tonWallet.imported === false && 
+        tonWallet.delegated === false
+      
+      if (!walletId) {
+        throw new Error(
+          'Unable to find wallet ID in TON wallet. ' +
+          'The wallet structure may have changed.'
+        )
       }
       
-      const publicKey = Buffer.from(tonWallet.publicKey?.slice(2) || '', 'hex')
+      if (!isEmbeddedWallet) {
+        throw new Error(
+          'This appears to be an imported or delegated wallet, not a Privy embedded wallet. ' +
+          'Swaps are currently only supported with Privy embedded wallets that can sign transactions. ' +
+          'Current wallet: imported=' + (tonWallet as any).imported + ', delegated=' + (tonWallet as any).delegated
+        )
+      }
       
-      // Create wallet contract
+      const authToken = await getAccessToken()
+      publicKey = await getWalletPublicKey(
+        walletId, 
+        privyAppId,
+        authToken || undefined
+      )
+
+      // Create wallet contract with the public key
+      const publicKeyBuffer = Buffer.from(publicKey, 'hex')
+      
+      // Create wallet - Privy's address derivation doesn't match standard WalletContractV4
       const wallet = WalletContractV4.create({
         workchain: 0,
-        publicKey: publicKey,
+        publicKey: publicKeyBuffer.length === 33 ? publicKeyBuffer.subarray(1) : publicKeyBuffer,
       })
+      
+      // Note: This will fail because Privy's wallet address derivation is non-standard
+      if (wallet.address.toString() !== walletAddress) {
+        throw new Error(
+          'Unable to derive the correct wallet address from the public key. ' +
+          'Privy\'s wallet address derivation does not match standard WalletContractV4 implementation. ' +
+          'Expected: ' + walletAddress + ', Got: ' + wallet.address.toString()
+        )
+      }
+      
+      const client = getTonClient()
       const contract = client.open(wallet)
-      
-      // Get seqno
+
+      // Get seqno for the wallet
       const seqno = await contract.getSeqno()
-      
-      // Create transfer with Privy signing
-      const transfer = await createTransferWithPrivy(
-        wallet,
-        walletId,
-        seqno,
-        messages.map(msg => internal({
+
+      // Convert Omniston messages to TON internal messages
+      const internalMessages = messages.map(msg => 
+        internal({
           value: msg.sendAmount,
           to: msg.targetAddress,
-          body: msg.payload ? Cell.fromBase64(msg.payload) : undefined
-        }))
+          body: msg.payload ? Cell.fromBase64(msg.payload) : undefined,
+        })
       )
-      
-      // Send transaction
+
+      // Create transfer with signer callback
+      const transfer = await contract.createTransfer({
+        seqno,
+        messages: internalMessages,
+        signer: async (msgCell: Cell) => {
+          const hash = msgCell.hash()
+          const hexHash = toHex(hash)
+          
+          // Sign using Privy
+          const { signature } = await signRawHash({
+            address: walletAddress,
+            chainType: 'ton',
+            hash: hexHash
+          })
+          
+          // Return signature as Buffer (remove 0x prefix)
+          return Buffer.from(signature.slice(2), 'hex')
+        },
+      })
+
+      // Send the transaction
       await contract.send(transfer)
       
-      // Get transaction hash
+      // Get transaction hash from BOC
       const exBoc = transfer.toBoc().toString('base64')
+      
       const txHash = await getTxByBOC(exBoc, walletAddress)
       setOutgoingTxHash(txHash)
       
@@ -202,7 +270,7 @@ export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapP
     } finally {
       setIsSwapping(false)
     }
-  }, [quote, walletAddress, walletId, user, buildTransaction, createTransferWithPrivy, getTxByBOC])
+  }, [quote, walletAddress, tonWallet, signRawHash, buildTransaction, getTxByBOC, privyAppId, getAccessToken])
 
   // Reset swap state
   const resetSwap = useCallback(() => {

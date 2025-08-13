@@ -17,7 +17,9 @@
       "Bash(pnpm build:*)",
       "Bash(npm run typecheck:*)",
       "Bash(npm run:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:docs.privy.io)"
     ],
     "deny": []
   }

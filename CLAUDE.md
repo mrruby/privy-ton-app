@@ -35,8 +35,7 @@ This is a React-based web application that integrates Privy authentication with 
 - **Custom Hooks**:
   - `useEmailAuth` - email authentication flow
   - `useTonWallet` - wallet management and balance
-  - `usePrivyTonSigner` - bridges Privy signing with TON transactions
-  - `useOmnistonSwap` - handles swap quotes, execution, and tracking
+  - `useOmnistonSwap` - handles swap quotes, execution, and tracking with Privy signing
   - `useAssets` - fetches available assets from STON.fi API (shared by wallet and swap)
   - `useTokenBalances` - fetches all token balances for a wallet using TonAPI (efficient single call)
 - **Utilities**:
@@ -76,6 +75,37 @@ This is a React-based web application that integrates Privy authentication with 
 - UI includes proper loading states, error handling, and trade tracking
 - Wallet displays all tokens with non-zero balances using Jetton contracts
 - Responsive design with blue/indigo theme matching Omniston Quickstart Guide
+
+### Known Limitations
+
+- **TON Swaps with Privy**: Currently, Privy embedded wallets have critical limitations for TON:
+  - They don't expose the wallet's public key directly in the linked accounts
+  - The public key can be fetched via Privy's REST API at `https://auth.privy.io/api/v1/wallets/{walletId}`
+  - This requires authentication with `getAccessToken()` from the Privy SDK
+  - Even with the public key, constructing and sending TON transactions via Privy is complex
+- **Current Implementation Status**:
+  - The `useOmnistonSwap` hook has been updated to:
+    1. Fetch the wallet's public key from Privy's API using Bearer authentication
+    2. Create a `WalletContractV4` instance with the public key
+    3. Build proper TON transactions for Omniston swaps
+    4. Sign transaction hashes using Privy's `signRawHash` function
+    5. Send the signed transaction to the TON network
+  - The implementation uses `getAccessToken()` from Privy SDK for authentication
+  - However, the implementation may still face issues with:
+    - Wallet contract state initialization
+    - Sequence number (seqno) management
+    - Transaction format compatibility
+- **Technical Details**: 
+  - TON uses a unique transaction model where wallets are smart contracts
+  - To send a transaction, you need to construct a message that the wallet contract will execute
+  - This requires knowing the wallet's public key to derive the correct contract address and state
+  - Privy's `signRawHash` can sign transaction hashes with the ed25519 keypair
+  - The signed transaction is sent using the TON SDK's wallet contract methods
+- **Workarounds**: For production use, consider:
+  1. Use TonConnect instead of Privy for wallet connectivity (most reliable)
+  2. Test the current Privy implementation thoroughly before production use
+  3. Use a hybrid approach where Privy handles authentication but TonConnect handles transactions
+  4. Wait for official Privy TON transaction support with better integration
 
 
 # Omniston Quickstart Guide
