@@ -31,6 +31,7 @@ export const SwapInterface: React.FC = () => {
     isSwapping,
     swapError,
     tradeStatus,
+    trackingError,
     resetSwap
   } = useOmnistonSwap({
     fromAsset,
@@ -123,7 +124,7 @@ export const SwapInterface: React.FC = () => {
         </div>
       )}
 
-      {quoteError && !isSwapping && <ErrorMessage error={quoteError as Error} />}
+      {quoteError && !isSwapping && !isCancelledError(quoteError) && <ErrorMessage error={quoteError as Error} />}
 
       {quote && 'quote' in quote && (
         <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-indigo-200">
@@ -158,9 +159,13 @@ export const SwapInterface: React.FC = () => {
       )}
 
       {/* Swap Error */}
-      {swapError && <ErrorMessage error={swapError} />}
+      {swapError && !isCancelledError(swapError) && <ErrorMessage error={swapError} />}
 
       {/* Trade Status */}
+      {trackingError && !isCancelledError(trackingError) && !tradeStatus?.status?.tradeSettled && (
+        <ErrorMessage error={trackingError as Error} />
+      )}
+      
       {tradeStatus && (
         <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
           <p className="text-sm text-gray-600">
@@ -193,4 +198,29 @@ function getTradeResultText(status: any) {
     default:
       return "Unknown status"
   }
+}
+
+// Helper to check if error is CancelledError
+function isCancelledError(error: any): boolean {
+  if (!error) return false
+  
+  // Check error name
+  if (error.name === 'CancelledError') return true
+  
+  // Check error message
+  const message = error.message || error.toString() || ''
+  if (message.includes('CancelledError') || 
+      message.includes('cancelled') || 
+      message.includes('aborted') ||
+      message.includes('cancel')) {
+    return true
+  }
+  
+  // Check if it's an Axios cancel error
+  if (error.code === 'ERR_CANCELED' || error.code === 'ECONNABORTED') return true
+  
+  // Check the error constructor name
+  if (error.constructor?.name === 'CancelledError') return true
+  
+  return false
 }
