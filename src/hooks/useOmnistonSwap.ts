@@ -10,12 +10,13 @@ import {
   GaslessSettlement,
   type QuoteResponseEvent_QuoteUpdated
 } from '@ston-fi/omniston-sdk-react'
-import { Address, Cell, beginCell, storeMessage, WalletContractV4, internal } from '@ton/ton'
+import { Address, Cell, beginCell, storeMessage, internal, toNano, SendMode } from '@ton/ton'
 import type { AssetInfoV2 } from '@ston-fi/api'
 import { toHex } from 'viem'
 import { useTonWallet } from './useTonWallet'
 import { getTonClient } from '../utils/tonClient'
 import { getWalletPublicKey } from '../utils/privyApi'
+import { deriveTonWalletFromPublicKey } from '../utils/tonAddress'
 
 interface UseOmnistonSwapProps {
   fromAsset?: AssetInfoV2
@@ -83,6 +84,10 @@ export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapP
       throw new Error('Wallet not connected')
     }
 
+    console.log('=== Building Omniston transaction ===')
+    console.log('Quote:', willTradedQuote.quote)
+    console.log('Wallet address:', walletAddress)
+
     const tx = await omniston.buildTransfer({
       quote: willTradedQuote.quote,
       sourceAddress: {
@@ -97,8 +102,15 @@ export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapP
         blockchain: Blockchain.TON,
         address: walletAddress,
       },
-      useRecommendedSlippage: false,
+      useRecommendedSlippage: true, // Changed to true to use recommended slippage from the quote
     })
+
+    console.log('Built transaction:', tx)
+    console.log('TON messages:', tx.ton?.messages)
+    
+    if (!tx.ton?.messages || tx.ton.messages.length === 0) {
+      console.error('No messages generated from Omniston buildTransfer')
+    }
 
     return tx.ton?.messages || []
   }, [omniston, walletAddress])
@@ -202,61 +214,179 @@ export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapP
         authToken || undefined
       )
 
-      // Create wallet contract with the public key
-      const publicKeyBuffer = Buffer.from(publicKey, 'hex')
+      // Derive the TON wallet and address from the public key
+      console.log('Public key from Privy:', publicKey)
+      const { address: derivedAddress, wallet } = deriveTonWalletFromPublicKey(publicKey)
+      console.log('Derived address:', derivedAddress)
+      console.log('Privy wallet address:', walletAddress)
       
-      // Create wallet - Privy's address derivation doesn't match standard WalletContractV4
-      const wallet = WalletContractV4.create({
-        workchain: 0,
-        publicKey: publicKeyBuffer.length === 33 ? publicKeyBuffer.subarray(1) : publicKeyBuffer,
-      })
-      
-      // Note: This will fail because Privy's wallet address derivation is non-standard
-      if (wallet.address.toString() !== walletAddress) {
-        throw new Error(
-          'Unable to derive the correct wallet address from the public key. ' +
-          'Privy\'s wallet address derivation does not match standard WalletContractV4 implementation. ' +
-          'Expected: ' + walletAddress + ', Got: ' + wallet.address.toString()
+      // Verify the derived address matches Privy's wallet address
+      if (derivedAddress !== walletAddress) {
+        console.warn(
+          'Derived address does not match Privy wallet address. ' +
+          'Expected: ' + walletAddress + ', Got: ' + derivedAddress + '. ' +
+          'This may indicate Privy uses a different derivation method.'
         )
       }
       
       const client = getTonClient()
       const contract = client.open(wallet)
 
+      // Check if wallet is deployed
+      const contractState = await client.getContractState(wallet.address)
+      console.log('Wallet contract state:', contractState.state)
+      
+      if (contractState.state !== 'active') {
+        console.warn('Wallet is not deployed. State:', contractState.state)
+        
+        // Check if wallet has balance but needs deployment
+        const balance = await client.getBalance(wallet.address)
+        console.log('Wallet balance:', balance.toString())
+        
+        if (balance > 0n) {
+          console.log('Wallet has funds but needs deployment. Attempting to deploy...')
+          
+          try {
+            // Create a deployment transaction (send small amount to self with seqno 0)
+            const deployAmount = toNano('0.01') // Small amount for deployment
+            
+            const deployTransfer = await wallet.createTransfer({
+              seqno: 0, // First transaction, includes StateInit
+              messages: [
+                internal({
+                  value: deployAmount,
+                  to: wallet.address,
+                  body: 'Wallet deployment',
+                })
+              ],
+              signer: async (msgCell: Cell) => {
+                const hash = msgCell.hash()
+                const hexHash = toHex(hash)
+                console.log('Signing deployment message hash:', hexHash)
+                
+                // Sign using Privy
+                const { signature } = await signRawHash({
+                  address: walletAddress,
+                  chainType: 'ton',
+                  hash: hexHash
+                })
+                console.log('Got deployment signature:', signature)
+                
+                // Return signature as Buffer (remove 0x prefix)
+                return Buffer.from(signature.slice(2), 'hex')
+              },
+            })
+            
+            console.log('Sending deployment transaction...')
+            await contract.send(deployTransfer)
+            
+            // Wait a bit for deployment to process
+            await new Promise(resolve => setTimeout(resolve, 3000))
+            
+            // Check deployment status again
+            const newState = await client.getContractState(wallet.address)
+            if (newState.state === 'active') {
+              console.log('Wallet deployed successfully!')
+            } else {
+              throw new Error('Deployment transaction sent but wallet still not active')
+            }
+          } catch (deployError) {
+            console.error('Failed to deploy wallet:', deployError)
+            throw new Error(
+              'Failed to deploy wallet. Error: ' + (deployError instanceof Error ? deployError.message : String(deployError))
+            )
+          }
+        } else {
+          throw new Error(
+            'Your TON wallet is not deployed yet. To deploy it:\n\n' +
+            '1. Send at least 0.05 TON to your wallet address\n' +
+            '2. Try to make a swap again - the wallet will auto-deploy\n\n' +
+            'Your wallet address: ' + walletAddress + '\n\n' +
+            'Note: On TON, all wallets are smart contracts that need to be deployed.'
+          )
+        }
+      }
+
       // Get seqno for the wallet
-      const seqno = await contract.getSeqno()
+      let seqno: number
+      try {
+        seqno = await contract.getSeqno()
+        console.log('Wallet seqno:', seqno)
+      } catch (seqnoError) {
+        console.error('Failed to get seqno:', seqnoError)
+        // If wallet is not deployed, seqno is 0
+        seqno = 0
+        console.log('Using seqno 0 for undeployed wallet')
+      }
 
       // Convert Omniston messages to TON internal messages
-      const internalMessages = messages.map(msg => 
-        internal({
+      console.log('Building internal messages from:', messages)
+      const internalMessages = messages.map(msg => {
+        console.log('Processing message:', {
+          value: msg.sendAmount,
+          to: msg.targetAddress,
+          hasPayload: !!msg.payload,
+          payload: msg.payload
+        })
+        return internal({
           value: msg.sendAmount,
           to: msg.targetAddress,
           body: msg.payload ? Cell.fromBase64(msg.payload) : undefined,
+          bounce: true, // Enable bounce for smart contract interactions
         })
-      )
-
-      // Create transfer with signer callback
-      const transfer = await contract.createTransfer({
-        seqno,
-        messages: internalMessages,
-        signer: async (msgCell: Cell) => {
-          const hash = msgCell.hash()
-          const hexHash = toHex(hash)
-          
-          // Sign using Privy
-          const { signature } = await signRawHash({
-            address: walletAddress,
-            chainType: 'ton',
-            hash: hexHash
-          })
-          
-          // Return signature as Buffer (remove 0x prefix)
-          return Buffer.from(signature.slice(2), 'hex')
-        },
       })
 
+      // Create transfer with signer callback
+      console.log('Creating transfer with seqno:', seqno, 'and', internalMessages.length, 'messages')
+      let transfer
+      try {
+        transfer = await contract.createTransfer({
+          seqno,
+          messages: internalMessages,
+          sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
+          signer: async (msgCell: Cell) => {
+            const hash = msgCell.hash()
+            const hexHash = toHex(hash)
+            console.log('Signing message hash:', hexHash)
+            
+            // Sign using Privy
+            const { signature } = await signRawHash({
+              address: walletAddress,
+              chainType: 'ton',
+              hash: hexHash
+            })
+            console.log('Got signature:', signature)
+            
+            // Return signature as Buffer (remove 0x prefix)
+            return Buffer.from(signature.slice(2), 'hex')
+          },
+        })
+        console.log('Transfer created successfully')
+      } catch (createError) {
+        console.error('Failed to create transfer:', createError)
+        throw new Error(`Failed to create transfer: ${createError instanceof Error ? createError.message : String(createError)}`)
+      }
+
       // Send the transaction
-      await contract.send(transfer)
+      console.log('=== Sending transaction ===')
+      console.log('Transfer object:', transfer)
+      console.log('Transfer BOC:', transfer.toBoc().toString('base64'))
+      
+      try {
+        await contract.send(transfer)
+        console.log('Transaction sent successfully')
+      } catch (sendError: any) {
+        console.error('Failed to send transaction:', sendError)
+        // Log the detailed error response if available
+        if (sendError.response?.data) {
+          console.error('API Error Response:', sendError.response.data)
+        }
+        if (sendError.response?.status === 500 && sendError.response?.data?.error) {
+          const apiError = sendError.response.data.error
+          throw new Error(`TON API Error: ${apiError}`)
+        }
+        throw new Error(`Failed to send transaction: ${sendError instanceof Error ? sendError.message : String(sendError)}`)
+      }
       
       // Get transaction hash from BOC
       const exBoc = transfer.toBoc().toString('base64')

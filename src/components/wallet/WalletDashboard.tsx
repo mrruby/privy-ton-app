@@ -6,6 +6,7 @@ import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { ErrorMessage } from '../ui/ErrorMessage'
 import { SwapInterface } from '../swap/SwapInterface'
 import { TokenBalanceItem } from './TokenBalance'
+import { WalletDeployStatus } from './WalletDeployStatus'
 
 export const WalletDashboard: React.FC = () => {
   const { user, logout } = usePrivy()
@@ -71,6 +72,9 @@ export const WalletDashboard: React.FC = () => {
 
               {hasWallet && address ? (
                 <div className="space-y-4">
+                  {/* Wallet deployment status */}
+                  <WalletDeployStatus />
+                  
                   <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-indigo-200">
                     <div className="space-y-4">
                       <div>

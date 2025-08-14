@@ -88,11 +88,16 @@ This is a React-based web application that integrates Privy authentication with 
     1. Fetch the wallet's public key from Privy's API using Bearer authentication
     2. Create a `WalletContractV4` instance with the public key
     3. Build proper TON transactions for Omniston swaps
-    4. Sign transaction hashes using Privy's `signRawHash` function
+    4. Sign transaction hashes using Privy SDK's `useSignRawHash` hook from `@privy-io/react-auth/extended-chains`
     5. Send the signed transaction to the TON network
-  - The implementation uses `getAccessToken()` from Privy SDK for authentication
+  - The implementation uses the SDK's signing functionality directly (no backend proxy needed)
+  - Wallet deployment is handled by `useWalletDeploy` hook which:
+    1. Checks wallet state and balance
+    2. Creates deployment transaction with StateInit
+    3. Signs using Privy SDK's `useSignRawHash`
+    4. Sends the external message to deploy the contract
   - However, the implementation may still face issues with:
-    - Wallet contract state initialization
+    - Wallet contract state initialization timing
     - Sequence number (seqno) management
     - Transaction format compatibility
 - **Technical Details**: 

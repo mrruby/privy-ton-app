@@ -19,7 +19,10 @@
       "Bash(npm run:*)",
       "Bash(npx tsc:*)",
       "Bash(grep:*)",
-      "WebFetch(domain:docs.privy.io)"
+      "WebFetch(domain:docs.privy.io)",
+      "WebFetch(domain:docs.ton.org)",
+      "Bash(pnpm dev:*)",
+      "Bash(pnpm list:*)"
     ],
     "deny": []
   }

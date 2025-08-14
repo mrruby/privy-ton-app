@@ -22,7 +22,24 @@ createRoot(document.getElementById('root')!).render(
     <PrivyProvider
       appId={import.meta.env.VITE_PRIVY_APP_ID}
       config={{
-        loginMethods: ['email']
+        loginMethods: ['email'],
+        supportedChains: [
+          { 
+            id: 'ton',
+            name: 'TON',
+            network: 'ton',
+            nativeCurrency: {
+              name: 'Toncoin',
+              symbol: 'TON',
+              decimals: 9,
+            },
+            rpcUrls: {
+              default: {
+                http: ['https://toncenter.com/api/v2/jsonRPC'],
+              },
+            },
+          }
+        ] as any
       }}
     >
       <QueryClientProvider client={queryClient}>
