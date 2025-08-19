@@ -5,7 +5,11 @@ import { ErrorMessage } from '../ui/ErrorMessage'
 import { useOmnistonSwap } from '../../hooks/useOmnistonSwap'
 import { useAssets } from '../../hooks/useAssets'
 
-export const SwapInterface: React.FC = () => {
+interface SwapInterfaceProps {
+  onTradeComplete?: () => void
+}
+
+export const SwapInterface: React.FC<SwapInterfaceProps> = ({ onTradeComplete }) => {
   const [amount, setAmount] = useState('')
   const [fromAsset, setFromAsset] = useState<AssetInfoV2 | undefined>()
   const [toAsset, setToAsset] = useState<AssetInfoV2 | undefined>()
@@ -43,6 +47,19 @@ export const SwapInterface: React.FC = () => {
   useEffect(() => {
     resetSwap()
   }, [fromAsset, toAsset, amount, resetSwap])
+
+  // Detect successful trade completion
+  useEffect(() => {
+    if (tradeStatus?.status?.tradeSettled) {
+      const result = tradeStatus.status.tradeSettled.result
+      if (result === "TRADE_RESULT_FULLY_FILLED") {
+        // Give a small delay to show the success message before switching tabs
+        setTimeout(() => {
+          onTradeComplete?.()
+        }, 2000)
+      }
+    }
+  }, [tradeStatus, onTradeComplete])
 
   if (assetsLoading) {
     return (

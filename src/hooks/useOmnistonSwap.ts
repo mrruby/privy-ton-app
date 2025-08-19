@@ -58,7 +58,7 @@ export const useOmnistonSwap = ({ fromAsset, toAsset, amount }: UseOmnistonSwapP
       maxPriceSlippageBps: 500,
     },
   }, {
-    enabled: !!fromAsset?.contractAddress && !!toAsset?.contractAddress && amount !== '' && !outgoingTxHash && !isSwapping,
+    enabled: !!fromAsset?.contractAddress && !!toAsset?.contractAddress && parseFloat(amount) > 0 && !outgoingTxHash && !isSwapping,
   })
 
   const { data: tradeStatus, isLoading: trackingLoading, error: trackingError } = useTrackTrade({

@@ -116,7 +116,7 @@ export const WalletDashboard: React.FC = () => {
               )}
             </>
           ) : (
-            <SwapInterface />
+            <SwapInterface onTradeComplete={() => setActiveTab('wallet')} />
           )}
 
           <button 
