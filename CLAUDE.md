@@ -44,7 +44,6 @@ This is a React-based web application that integrates Privy authentication with 
 - **Environment**: 
   - Required: `VITE_PRIVY_APP_ID` for authentication
   - Optional: `VITE_TON_API_KEY` for TonCenter API
-  - Optional: `VITE_TONAPI_KEY` for TonAPI (used for fetching token balances)
 
 ### Technology Stack
 
