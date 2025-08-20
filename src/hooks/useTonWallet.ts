@@ -29,7 +29,10 @@ export const useTonWallet = () => {
     queryKey: ['tonBalance', walletAddress],
     queryFn: () => fetchBalance(walletAddress!),
     enabled: !!walletAddress,
-    staleTime: 30000, // Consider data stale after 30 seconds
+    staleTime: 10000, // Consider data stale after 10 seconds
+    gcTime: 60000, // Keep in cache for 1 minute (was cacheTime in v4)
+    refetchInterval: false, // Don't auto-refetch
+    refetchOnWindowFocus: false, // Don't refetch on window focus
     retry: 2
   })
 
